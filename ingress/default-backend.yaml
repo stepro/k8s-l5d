@@ -1,0 +1,48 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  namespace: kube-system
+  name: default-http-backend
+  labels:
+    k8s-app: default-http-backend
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        k8s-app: default-http-backend
+    spec:
+      containers:
+      - name: default-http-backend
+        image: gcr.io/google_containers/defaultbackend:1.0
+        resources:
+          limits:
+            cpu: 10m
+            memory: 20Mi
+          requests:
+            cpu: 10m
+            memory: 20Mi
+        livenessProbe:
+          httpGet:
+            scheme: HTTP
+            port: 8080
+            path: /healthz
+          initialDelaySeconds: 30
+          timeoutSeconds: 5
+      terminationGracePeriodSeconds: 60
+---
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: kube-system
+  name: default-http-backend
+  labels:
+    k8s-app: default-http-backend
+spec:
+  selector:
+    k8s-app: default-http-backend
+  type: ClusterIP
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8080

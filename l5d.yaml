@@ -1,0 +1,229 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: l5d
+  labels:
+    run: l5d
+data:
+  nginx.conf: |-
+    worker_processes 1;
+    events {
+      worker_connections 1024;
+    }
+    http {
+      upstream context {
+        server localhost:32081;
+      }
+      server {
+        listen 32080;
+        location /_context {
+          internal;
+          proxy_http_version 1.1;
+          proxy_set_header Host $host;
+          set $user "";
+          if ($cookie_user != "") {
+            set $user "$cookie_user";
+          }
+          proxy_set_header User $user;
+          set $l5d_dtab "";
+          if ($cookie_l5d_dtab != "") {
+            set $l5d_dtab "$cookie_l5d_dtab";
+          }
+          proxy_set_header l5d-dtab $l5d_dtab;
+          proxy_set_header Content-Length "";
+          proxy_pass_request_body off;
+          proxy_pass http://context$request_uri;
+        }
+        location / {
+          auth_request /_context;
+          auth_request_set $user $upstream_http_user;
+          auth_request_set $l5d_dtab $upstream_http_l5d_dtab;
+          proxy_http_version 1.1;
+          proxy_set_header Host $host;
+          proxy_set_header Context-Headers user,l5d-ctx-*;
+          proxy_set_header user $user;
+          proxy_set_header l5d-ctx-deadline "";
+          proxy_set_header l5d-ctx-trace "";
+          proxy_set_header l5d-dtab $l5d_dtab;
+          proxy_set_header l5d-sample "";
+          proxy_pass http://localhost;
+          add_header Set-Cookie "user=$user";
+          add_header Set-Cookie "l5d_dtab=$l5d_dtab";
+        }
+      }
+    }
+  dtab.tmpl: |-
+    /svc => /$/io.buoyant.rinet/$SVC_PORT ;
+    /host => /$/io.buoyant.http.subdomainOfPfx/$POD_NAMESPACE.svc.cluster.local/host ;
+    /host => /$/io.buoyant.http.subdomainOfPfx/$POD_NAMESPACE.svc/host ;
+    /host => /$/io.buoyant.http.subdomainOfPfx/$POD_NAMESPACE/host ;
+    {{ range $res := .items -}}
+     {{ if eq $res.kind "Ingress" -}}
+      {{ if $res.spec.rules -}}
+       {{ range $rule := $res.spec.rules -}}
+        {{ range $path := $rule.http.paths -}}
+         {{ if or (not $path.path) (eq $path.path "/") -}}
+    /host/{{$rule.host}}:$SVC_PORT => /host/{{$path.backend.serviceName}}:{{$path.backend.servicePort}} ;
+    /host/{{$rule.host}} => /host/{{$path.backend.serviceName}}:{{$path.backend.servicePort}} ;
+         {{ end -}}
+        {{ end -}}
+       {{ end -}}
+      {{ end -}}
+     {{ end -}}
+     {{ if eq $res.kind "Service" -}}
+      {{ $meta := $res.metadata -}}
+      {{ if $meta.labels.via -}}
+       {{ range $key, $value := $meta.labels -}}
+        {{ if ne $key "via" -}}
+    /label/{{$key}}/{{$value}}/{{$meta.labels.via}} => /svc/{{$meta.name}} ;
+        {{ end -}}
+       {{ end -}}
+      {{ end -}}
+      {{ if and (ne $meta.name "l5d") $res.spec.selector.run -}}
+       {{ if eq $res.spec.selector.run "l5d" -}}
+        {{ if eq $res.spec.type "LoadBalancer" -}}
+         {{ $lb := $res.status.loadBalancer -}}
+         {{ if $lb.ingress -}}
+    /host/{{range $lb.ingress}}{{.ip}}{{end}}:$SVC_PORT => /host/{{$meta.name}} ;
+    /host/{{range $lb.ingress}}{{.ip}}{{end}} => /host/{{$meta.name}} ;
+         {{ end -}}
+         {{ if $meta.annotations.vhost -}}
+    /host/{{$meta.annotations.vhost}}:$SVC_PORT => /host/{{$meta.name}} ;
+    /host/{{$meta.annotations.vhost}} => /host/{{$meta.name}} ;
+         {{ end -}}
+        {{ end -}}
+        {{ if $res.spec.clusterIP -}}
+    /host/{{$res.spec.clusterIP}}:$SVC_PORT => /host/{{$meta.name}} ;
+    /host/{{$res.spec.clusterIP}} => /host/{{$meta.name}} ;
+        {{ end -}}
+    /host/{{$meta.name}}:$SVC_PORT => /host/{{$meta.name}} ;
+        {{ if $meta.annotations.l5d -}}
+    /host/{{$meta.name}} => {{$meta.annotations.l5d}} ;
+        {{ end -}}
+       {{ end -}}
+      {{ end -}}
+     {{ end -}}
+    {{ end -}}
+    /http/*/* => /host ;
+  n4d.config.yaml: |-
+    interfaces:
+    - kind: io.l5d.httpController
+      ip: 0.0.0.0
+    - kind: io.l5d.thriftNameInterpreter
+    namers: []
+    storage:
+      kind: io.l5d.inMemory
+      namespaces:
+        default:
+  l5d.config.yaml: |-
+    routers:
+    - protocol: http
+      servers:
+      - ip: 0.0.0.0
+        port: 80
+      interpreter:
+        kind: io.l5d.namerd
+        namespace: default
+        dst: /$/inet/localhost/4100
+---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: l5d
+  labels:
+    run: l5d
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      run: l5d
+  template:
+    metadata:
+      labels:
+        run: l5d
+    spec:
+      volumes:
+      - name: l5d-config
+        configMap:
+          name: l5d
+      containers:
+      - name: nginx-ingress
+        image: nginx:alpine
+        volumeMounts:
+        - name: l5d-config
+          subPath: nginx.conf
+          mountPath: /etc/nginx/nginx.conf
+          readOnly: true
+      - name: contextd
+        image: stephpr/contextd
+      - name: dtabd
+        image: stephpr/dtabd
+        volumeMounts:
+        - name: l5d-config
+          mountPath: /config
+          readOnly: true
+        env:
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: SVC_PORT
+          value: "80"
+        - name: ENV_SUBST
+          value: "$POD_NAMESPACE $SVC_PORT"
+        args:
+        - /config/dtab.tmpl
+      - name: n4d
+        image: buoyantio/namerd:0.8.6
+        volumeMounts:
+        - name: l5d-config
+          mountPath: /io.buoyant/namerd/config
+          readOnly: true
+        ports:
+        - name: n4d-thrift
+          containerPort: 4100
+        - name: n4d-http
+          containerPort: 4180
+        - name: n4d-admin
+          containerPort: 9991
+        args:
+        - /io.buoyant/namerd/config/n4d.config.yaml
+        readinessProbe:
+          tcpSocket:
+            port: 9991
+      - name: l5d
+        image: buoyantio/linkerd:0.8.6
+        volumeMounts:
+        - name: l5d-config
+          mountPath: /io.buoyant/linkerd/config
+          readOnly: true
+        ports:
+        - name: http
+          containerPort: 80
+        - name: admin
+          containerPort: 9990
+        args:
+        - /io.buoyant/linkerd/config/l5d.config.yaml
+        readinessProbe:
+          tcpSocket:
+            port: 9990
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: l5d
+  labels:
+    run: l5d
+spec:
+  selector:
+    run: l5d
+  type: ClusterIP
+  ports:
+  - name: http
+    port: 80
+  - name: api
+    port: 4180
+  - name: admin
+    port: 9990
+  - name: ingress-http
+    port: 32080
