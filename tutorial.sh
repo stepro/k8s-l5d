@@ -153,7 +153,10 @@ First, deploy and expose the stable version of the service:
 '
 code 'kubectl run service-b-dd6eb16 --image=stephpr/service-b:dd6eb164c5b3d31488377b48372db9451ac469f9 --port=80' \
      'kubectl expose deployment service-b-dd6eb16 -l via=service-b,track=stable,run=service-b-dd6eb16 --port=80' \
-     'export SERVICE_B_STABLE=$(kubectl get service service-b-dd6eb16 -o go-template={{.spec.clusterIP}})'
+     'export SERVICE_B_STABLE=$(kubectl get service service-b-dd6eb16 -o go-template={{.spec.clusterIP}})' \
+     'echo -n pinging...' \
+     'until [ "$(curl --connect-timeout 1 -s $SERVICE_B_STABLE)" ]; do echo -n .; done' \
+     'echo healthy'
 body '
 There are two labels specified here that are of interest:
 '
@@ -162,10 +165,7 @@ list '"via": indicates that this service is accessed via the logical service "se
 body '
 Curl this specific version of the service to make sure it is working:
 '
-code 'echo -n pinging...' \
-     'until [ "$(curl --connect-timeout 1 -s $SERVICE_B_STABLE)" ]; do echo -n .; done' \
-     'echo healthy' \
-     'curl $SERVICE_B_STABLE'
+code 'curl $SERVICE_B_STABLE'
 body '
 
 Next, tell the logical service about the specific version of the service we deployed:
@@ -343,7 +343,7 @@ section 'Virtual Environments'
 body '
 The last part of this tutorial brings together everything described so far to create a virtual environment that builds on and derives from a baseline or default environment. Contrast this to a traditional environment in which a full stack of components must be spun up.
 
-Currently we have three versions of "service-a" - stable, canary and private (to johnsta) - and two versions of "service-b": stable and private (to stephpr). Imagine first that stephpr wishes to create a virtual environment that includes all of his private versions of services, and for any service that does not exist, to pick any canary version over the stable version.
+Currently we have three versions of "service-a" - stable, canary and private (to johnsta) - and two versions of "service-b": stable and private (to stephpr). Imagine first that stephpr wishes to create a virtual environment that includes all of his private versions of services, and if a private version does not exist, to pick any canary version over the stable version.
 
 With linkerd routing, this is trivial:
 '
@@ -354,12 +354,12 @@ For "service-a", there was no service labeled "dev=stephpr" but there was one la
 
 Now suppose johnsta and stephpr are working together on new versions of "service-a" and "service-b" that relate to a particular feature "mycoolfeature". What they want to do is specify a route that matches the private versions of both "service-a" and "service-b".
 
-They can do this by specifying multiple rules in the linkerd header:
+They could do this by specifying multiple rules in the linkerd header:
 '
 code 'curl $SERVICE_A/api -H "Context-Headers: l5d-ctx-*" -H "l5d-dtab: /host/service-a => /label/dev/johnsta/service-a; /host/service-b => /label/dev/stephpr/service-b"'
 body '
 
-This is quite verbose. An alternative is to add a common label to both services and then route based on that label:
+However, this is quite verbose. An alternative is to add a common label to both services and then route based on that label:
 '
 code 'kubectl label service service-a-dev-johnsta feature=mycoolfeature' \
      'kubectl label service service-b-dev-stephpr feature=mycoolfeature'
