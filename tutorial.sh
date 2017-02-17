@@ -71,6 +71,7 @@ end-section() {
 }
 
 cleanup() {
+    echo
     echo Cleaning up...
     kubectl delete svc,deploy service-a-dev-johnsta 2> /dev/null
     kubectl delete svc,deploy service-a-726840f 2> /dev/null
@@ -376,11 +377,17 @@ section 'Want more?'
 body '
 The patterns presented here are implemented in the following repository:
 
-https://raw.githubusercontent.com/stepro/k8s-l5d/master/l5d.yaml
+https://github.com/stepro/k8s-l5d
 
 You can inspect the l5d.yaml file to see how linkerd and other components were configured to streamline the above scenarios.
 
-This repository also supports some features not yet described in this tutorial, such as a linkerd-aware ingress proxy that enables a user to specify a simplified routing rule as part of a query string. If these scenarios are interesting to you, please send a message to stephpr@microsoft.com and I would be happy to follow up!
+This repository also supports some features not described in this tutorial, such as a linkerd-aware ingress proxy that enables a user to specify a simplified routing rule as part of a query string. If these scenarios are interesting to you, please try the external service tutorial in this same repository as follows:
+
+curl -Ss https://raw.githubusercontent.com/stepro/k8s-l5d/master/external.sh > external.sh && \
+chmod +x external.sh && \
+./external.sh
+
+Any and all feedback on these patterns and whether they would be useful to you in a production context is greatly appreciated. Feel free to contact me at stephpr@microsoft.com and I would be happy to chat!
 
 Reminder: If you would like to clean up the objects created by this tutorial, hit Ctrl+C now. You can also clean them up later by restarting the tutorial and immediately hitting Ctrl+C.
 

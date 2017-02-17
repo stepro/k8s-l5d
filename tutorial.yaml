@@ -1,0 +1,208 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: service-b
+  labels:
+    run: l5d
+  annotations:
+    l5d: /svc/service-b-f79630b
+spec:
+  selector:
+    run: l5d
+  ports:
+  - port: 80
+---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: service-b-f79630b
+  labels:
+    run: service-b-f79630b
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      run: service-b-f79630b
+  template:
+    metadata:
+      labels:
+        run: service-b-f79630b
+    spec:
+      containers:
+      - name: service-b-f79630b
+        image: stephpr/service-b:f79630bf63832ae2ab78c25a18d889bf4f4fd378
+        ports:
+        - containerPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: service-b-f79630b
+  labels:
+    via: service-b
+    track: stable
+    run: service-b-f79630b
+spec:
+  selector:
+    run: service-b-f79630b
+  ports:
+  - port: 80
+---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: service-b-dev-stephpr
+  labels:
+    run: service-b-dev-stephpr
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      run: service-b-dev-stephpr
+  template:
+    metadata:
+      labels:
+        run: service-b-dev-stephpr
+    spec:
+      containers:
+      - name: service-b-dev-stephpr
+        image: stephpr/service-b:dev-stephpr-1e73ef836015
+        ports:
+        - containerPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: service-b-dev-stephpr
+  labels:
+    via: service-b
+    dev: stephpr
+    run: service-b-dev-stephpr
+spec:
+  selector:
+    run: service-b-dev-stephpr
+  ports:
+  - port: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: service-a
+  labels:
+    run: l5d
+  annotations:
+    l5d: /svc/service-a-240bf8b
+spec:
+  selector:
+    run: l5d
+  ports:
+  - port: 80
+---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: service-a-240bf8b
+  labels:
+    run: service-a-240bf8b
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      run: service-a-240bf8b
+  template:
+    metadata:
+      labels:
+        run: service-a-240bf8b
+    spec:
+      containers:
+      - name: service-a-240bf8b
+        image: stephpr/service-a:240bf8b84cb9bd71f4d329362d93be42ce2c65e6
+        ports:
+        - containerPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: service-a-240bf8b
+  labels:
+    via: service-a
+    track: stable
+    run: service-a-240bf8b
+spec:
+  selector:
+    run: service-a-240bf8b
+  ports:
+  - port: 80
+---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: service-a-726840f
+  labels:
+    run: service-a-726840f
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      run: service-a-726840f
+  template:
+    metadata:
+      labels:
+        run: service-a-726840f
+    spec:
+      containers:
+      - name: service-a-726840f
+        image: stephpr/service-a:726840f2df9e2a6e3e9e2ce92f3307b2735f1adf
+        ports:
+        - containerPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: service-a-726840f
+  labels:
+    via: service-a
+    track: canary
+    run: service-a-726840f
+spec:
+  selector:
+    run: service-a-726840f
+  ports:
+  - port: 80
+---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: service-a-dev-johnsta
+  labels:
+    run: service-a-dev-johnsta
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      run: service-a-dev-johnsta
+  template:
+    metadata:
+      labels:
+        run: service-a-dev-johnsta
+    spec:
+      containers:
+      - name: service-a-dev-johnsta
+        image: stephpr/service-a:dev-johnsta-fafb8856f7f7
+        ports:
+        - containerPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: service-a-dev-johnsta
+  labels:
+    via: service-a
+    dev: johnsta
+    run: service-a-dev-johnsta
+spec:
+  selector:
+    run: service-a-dev-johnsta
+  ports:
+  - port: 80
+
