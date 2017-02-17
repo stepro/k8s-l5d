@@ -107,7 +107,6 @@ body '
 Kubernetes is already up and running. To pick up from where the first tutorial left off, we need to ensure linkerd is installed as well as the various objects from the first tutorial:
 '
 code 'kubectl apply -f https://raw.githubusercontent.com/stepro/k8s-l5d/master/l5d.yaml' \
-     'kubectl apply -f tutorial.yaml'
      'kubectl apply -f https://raw.githubusercontent.com/stepro/k8s-l5d/master/tutorial.yaml'
 body '
 Next, we patch "service-a" so that it is of type "LoadBalancer", which will create an external IP address through which we can access the service (it can take 2-5 minutes for the external IP to become available, so be patient):
