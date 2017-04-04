@@ -1,0 +1,155 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  namespace: kube-system
+  name: n4d
+  labels:
+    run: n4d
+data:
+  dtab.tmpl: |-
+    /svc => /$/io.buoyant.rinet/$SVC_PORT ;
+
+    {{ range $res := .items -}}
+     {{ if eq $res.kind "Service" -}}
+      {{ $meta := $res.metadata -}}
+      {{ if $meta.labels.via -}}
+    /ns/{{$meta.namespace}}/{{$meta.labels.via}} => /svc/{{$meta.name}}.{{$meta.namespace}} ;
+      {{ end -}}
+     {{ end -}}
+    {{ end -}}
+
+    /env/canary => /env/default ;
+    /env/stephpr => /env/canary ;
+
+    /env => /ns ;
+
+    {{ range $res := .items -}}
+     {{ if eq $res.kind "Service" -}}
+      {{ $meta := $res.metadata -}}
+      {{ if $meta.annotations.l5d -}}
+    /env/{{$meta.namespace}}/{{$meta.name}} => {{$meta.annotations.l5d}} ;
+      {{ end -}}
+     {{ end -}}
+    {{ end -}}
+
+    {{ range $res := .items -}}
+     {{ if eq $res.kind "Service" -}}
+      {{ $meta := $res.metadata -}}
+      {{ if and (ne $meta.name "l5d") $res.spec.selector.run -}}
+       {{ if eq $res.spec.selector.run "l5d" -}}
+    /env/{{$meta.namespace}}/{{$meta.name}}:$SVC_PORT => /env/{{$meta.namespace}}/{{$meta.name}} ;
+       {{ end -}}
+      {{ end -}}
+     {{ end -}}
+    {{ end -}}
+
+    /host => /route ;
+
+    {{ range $res := .items -}}
+     {{ if eq $res.kind "Service" -}}
+      {{ $meta := $res.metadata -}}
+      {{ if and (ne $meta.name "l5d") $res.spec.selector.run -}}
+       {{ if eq $res.spec.selector.run "l5d" -}}
+        {{ $target := printf "/host/%s" $meta.name -}}
+        {{ if eq $res.spec.type "LoadBalancer" -}}
+         {{ $lb := $res.status.loadBalancer -}}
+         {{ if $meta.annotations.vhost -}}
+    /host/{{$meta.annotations.vhost}} => {{$target}} ;
+    /host/{{$meta.annotations.vhost}}:$SVC_PORT => {{$target}} ;
+         {{ end -}}
+         {{ if $lb.ingress -}}
+    /host/{{range $lb.ingress}}{{.ip}}{{end}} => {{$target}} ;
+    /host/{{range $lb.ingress}}{{.ip}}{{end}}:$SVC_PORT => {{$target}} ;
+         {{ end -}}
+        {{ end -}}
+        {{ if $res.spec.clusterIP -}}
+    /host/{{$res.spec.clusterIP}} => {{$target}} ;
+    /host/{{$res.spec.clusterIP}}:$SVC_PORT => {{$target}} ;
+        {{ end -}}
+       {{ end -}}
+      {{ end -}}
+     {{ end -}}
+    {{ end -}}
+  n4d.config.yaml: |-
+    interfaces:
+    - kind: io.l5d.httpController
+      ip: 0.0.0.0
+    - kind: io.l5d.thriftNameInterpreter
+    namers: []
+    storage:
+      kind: io.l5d.inMemory
+      namespaces:
+        default:
+---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  namespace: kube-system
+  name: n4d
+  labels:
+    run: n4d
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      run: n4d
+  template:
+    metadata:
+      labels:
+        run: n4d
+    spec:
+      volumes:
+      - name: n4d-config
+        configMap:
+          name: n4d
+      containers:
+      - name: dtabd
+        image: stephpr/dtabd:2
+        volumeMounts:
+        - name: n4d-config
+          mountPath: /config
+          readOnly: true
+        env:
+        - name: SVC_PORT
+          value: "80"
+        - name: ENV_SUBST
+          value: "$SVC_PORT"
+        args:
+        - /config/dtab.tmpl
+      - name: n4d
+        image: buoyantio/namerd:0.9.1
+        volumeMounts:
+        - name: n4d-config
+          mountPath: /io.buoyant/namerd/config
+          readOnly: true
+        ports:
+        - name: thrift
+          containerPort: 4100
+        - name: http
+          containerPort: 4180
+        - name: admin
+          containerPort: 9991
+        args:
+        - /io.buoyant/namerd/config/n4d.config.yaml
+        readinessProbe:
+          tcpSocket:
+            port: 9991
+---
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: kube-system
+  name: n4d
+  labels:
+    run: n4d
+spec:
+  selector:
+    run: n4d
+  type: ClusterIP
+  ports:
+  - name: thrift
+    port: 4100
+  - name: http
+    port: 4180
+  - name: admin
+    port: 9991
