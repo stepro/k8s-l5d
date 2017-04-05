@@ -34,7 +34,7 @@ metadata:
   labels:
     run: l5d
 spec:
-  replicas: 1
+  replicas: 2
   selector:
     matchLabels:
       run: l5d

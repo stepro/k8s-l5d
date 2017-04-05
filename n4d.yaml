@@ -96,7 +96,7 @@ metadata:
   labels:
     run: n4d
 spec:
-  replicas: 1
+  replicas: 2
   selector:
     matchLabels:
       run: n4d
