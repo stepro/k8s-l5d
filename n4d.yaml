@@ -7,68 +7,75 @@ metadata:
     run: n4d
 data:
   dtab.tmpl: |-
+    {{/* Resolve services using DNS */ -}}
     /svc => /$/io.buoyant.rinet/$SVC_PORT ;
 
+    {{/* Map logical service names to service instances */ -}}
     {{ range $res := .items -}}
-     {{ if eq $res.kind "Service" -}}
-      {{ $meta := $res.metadata -}}
-      {{ if $meta.labels.via -}}
+    {{ if eq $res.kind "Service" -}}
+    {{ $meta := $res.metadata -}}
+    {{ if $meta.labels.via -}}
     /ns/{{$meta.namespace}}/{{$meta.labels.via}} => /svc/{{$meta.name}}.{{$meta.namespace}} ;
-      {{ end -}}
-     {{ end -}}
+    {{ end -}}
+    {{ end -}}
     {{ end -}}
 
-    /env/canary => /env/default ;
-    /env/stephpr => /env/canary ;
+    {{/* Environment fallback rules */}}
+    {{ range $res := .items -}}
+    {{ if eq $res.kind "Namespace" -}}
+    {{ $meta := $res.metadata -}}
+    {{ if $meta.labels.base -}}
+    /env/{{$meta.name}} => /env/{{$meta.labels.base}} ;
+    {{ end -}}
+    {{ end -}}
+    {{ end -}}
 
+    {{/* An environment is a namespace */}}
     /env => /ns ;
 
+    {{/* Logical service overrides */ -}}
     {{ range $res := .items -}}
-     {{ if eq $res.kind "Service" -}}
-      {{ $meta := $res.metadata -}}
-      {{ if $meta.annotations.l5d -}}
+    {{ if eq $res.kind "Service" -}}
+    {{ $meta := $res.metadata -}}
+    {{ if $meta.annotations.l5d -}}
     /env/{{$meta.namespace}}/{{$meta.name}} => {{$meta.annotations.l5d}} ;
-      {{ end -}}
-     {{ end -}}
     {{ end -}}
-
-    {{ range $res := .items -}}
-     {{ if eq $res.kind "Service" -}}
-      {{ $meta := $res.metadata -}}
-      {{ if and (ne $meta.name "l5d") $res.spec.selector.run -}}
-       {{ if eq $res.spec.selector.run "l5d" -}}
+    {{ if and (ne $meta.name "l5d") $res.spec.selector.run -}}
+    {{ if eq $res.spec.selector.run "l5d" -}}
     /env/{{$meta.namespace}}/{{$meta.name}}:$SVC_PORT => /env/{{$meta.namespace}}/{{$meta.name}} ;
-       {{ end -}}
-      {{ end -}}
-     {{ end -}}
+    {{ end -}}
+    {{ end -}}
+    {{ end -}}
     {{ end -}}
 
+    {{/* A host is routed to a specific environment */}}
     /host => /route ;
 
+    {{/* Normalize host names */ -}}
     {{ range $res := .items -}}
-     {{ if eq $res.kind "Service" -}}
-      {{ $meta := $res.metadata -}}
-      {{ if and (ne $meta.name "l5d") $res.spec.selector.run -}}
-       {{ if eq $res.spec.selector.run "l5d" -}}
-        {{ $target := printf "/host/%s" $meta.name -}}
-        {{ if eq $res.spec.type "LoadBalancer" -}}
-         {{ $lb := $res.status.loadBalancer -}}
-         {{ if $meta.annotations.vhost -}}
+    {{ if eq $res.kind "Service" -}}
+    {{ $meta := $res.metadata -}}
+    {{ if and (ne $meta.name "l5d") $res.spec.selector.run -}}
+    {{ if eq $res.spec.selector.run "l5d" -}}
+    {{ $target := printf "/host/%s" $meta.name -}}
+    {{ if eq $res.spec.type "LoadBalancer" -}}
+    {{ $lb := $res.status.loadBalancer -}}
+    {{ if $meta.annotations.vhost -}}
     /host/{{$meta.annotations.vhost}} => {{$target}} ;
     /host/{{$meta.annotations.vhost}}:$SVC_PORT => {{$target}} ;
-         {{ end -}}
-         {{ if $lb.ingress -}}
+    {{ end -}}
+    {{ if $lb.ingress -}}
     /host/{{range $lb.ingress}}{{.ip}}{{end}} => {{$target}} ;
     /host/{{range $lb.ingress}}{{.ip}}{{end}}:$SVC_PORT => {{$target}} ;
-         {{ end -}}
-        {{ end -}}
-        {{ if $res.spec.clusterIP -}}
+    {{ end -}}
+    {{ end -}}
+    {{ if $res.spec.clusterIP -}}
     /host/{{$res.spec.clusterIP}} => {{$target}} ;
     /host/{{$res.spec.clusterIP}}:$SVC_PORT => {{$target}} ;
-        {{ end -}}
-       {{ end -}}
-      {{ end -}}
-     {{ end -}}
+    {{ end -}}
+    {{ end -}}
+    {{ end -}}
+    {{ end -}}
     {{ end -}}
   n4d.config.yaml: |-
     interfaces:

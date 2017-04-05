@@ -15,7 +15,7 @@ if [ -n "$ENV_SUBST" ]; then
   TEMPLATE="$(dirname $0)/dtab.tmpl"
 fi
 N4D_HOST=${2:-localhost:4180}
-KINDS=${3:-ingress,service}
+KINDS=${3:-namespace,ingress,service}
 
 until curl -s $N4D_HOST/api/1/dtabs > /dev/null; do
   echo dtabd: waiting for connectivity...
@@ -45,7 +45,7 @@ PIDS=
 trap "kill $PIDS; exit 130" INT
 trap "kill $PIDS; exit 143" TERM
 
-for kind in ${KINDS/,/ }; do
+for kind in ${KINDS//,/ }; do
   watch $kind &
   PIDS="$PIDS $!"
 done
