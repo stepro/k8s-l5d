@@ -14,8 +14,13 @@ if [ -n "$ENV_SUBST" ]; then
   envsubst "$ENV_SUBST" < "$TEMPLATE" > "$(dirname $0)/dtab.tmpl"
   TEMPLATE="$(dirname $0)/dtab.tmpl"
 fi
-N4D_HOST=${2:-localhost:4180}
-KINDS=${3:-namespace,ingress,service}
+KINDS="$2"
+if [ -z "$KINDS" ]; then
+  echo >&2 error: dtabd: must specify resource types
+  exit 1
+fi
+N4D_HOST=${3:-localhost:4180}
+N4D_NAMESPACE=${4:-default}
 
 until curl -s $N4D_HOST/api/1/dtabs > /dev/null; do
   echo dtabd: waiting for connectivity...
@@ -24,7 +29,7 @@ done
 
 update() {
     kubectl get --all-namespaces $KINDS -o go-template-file="$TEMPLATE" \
-    | curl -isX PUT $N4D_HOST/api/1/dtabs/default -H 'Content-Type: application/dtab' -H 'Expect:' -d @- \
+    | curl -isX PUT $N4D_HOST/api/1/dtabs/$N4D_NAMESPACE -H 'Content-Type: application/dtab' -H 'Expect:' -d @- \
     | head -n1
 }
 

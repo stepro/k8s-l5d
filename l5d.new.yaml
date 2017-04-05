@@ -5,7 +5,13 @@ metadata:
   labels:
     run: l5d
 data:
-  l5d.config.yaml: |-
+  entrypoint.sh: |-
+    mkdir -p $(dirname $2)
+    sed \
+      -e s/'$(POD_NAMESPACE)'/$POD_NAMESPACE/g \
+      $(dirname $0)/l5d.config.yaml.tmpl > $2
+    exec "$@"
+  l5d.config.yaml.tmpl: |-
     routers:
     - protocol: http
       servers:
@@ -13,11 +19,13 @@ data:
         port: 80
       dstPrefix: /host
       dtab: |-
-        /route => /env/stephpr ;
+        /route => /env/$(POD_NAMESPACE) ;
+        /host => /$/io.buoyant.http.subdomainOfPfx/$(POD_NAMESPACE).svc.cluster.local/host ;
+        /host => /$/io.buoyant.http.subdomainOfPfx/$(POD_NAMESPACE).svc/host ;
+        /host => /$/io.buoyant.http.subdomainOfPfx/$(POD_NAMESPACE)/host ;
       interpreter:
         kind: io.l5d.namerd
         dst: /$/inet/n4d.kube-system/4100
-        namespace: default
 ---
 apiVersion: extensions/v1beta1
 kind: Deployment
@@ -44,13 +52,22 @@ spec:
         image: buoyantio/linkerd:0.9.1
         volumeMounts:
         - name: l5d-config
-          mountPath: /io.buoyant/linkerd/config
+          mountPath: /l5d-config
           readOnly: true
+        env:
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
         ports:
         - name: http
           containerPort: 80
         - name: admin
           containerPort: 9990
+        command:
+        - /bin/sh
+        - /l5d-config/entrypoint.sh
+        - /io.buoyant/linkerd/0.9.1/bundle-exec
         args:
         - /io.buoyant/linkerd/config/l5d.config.yaml
         readinessProbe:
