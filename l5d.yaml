@@ -5,106 +5,139 @@ metadata:
   labels:
     run: l5d
 data:
-  nginx.conf: |-
+  nginx.conf.tmpl: |-
     worker_processes 1;
     events {
       worker_connections 1024;
     }
     http {
-      upstream context {
-        server localhost:32081;
-      }
       server {
         listen 32080;
-        location /_context {
-          internal;
-          proxy_http_version 1.1;
-          proxy_set_header Host $host;
-          set $user "";
-          if ($cookie_user != "") {
-            set $user "$cookie_user";
-          }
-          proxy_set_header User $user;
-          set $l5d_dtab "";
-          if ($cookie_l5d_dtab != "") {
-            set $l5d_dtab "$cookie_l5d_dtab";
-          }
-          proxy_set_header l5d-dtab $l5d_dtab;
-          proxy_set_header Content-Length "";
-          proxy_pass_request_body off;
-          proxy_pass http://context$request_uri;
-        }
+        return 444;
+      }
+      {{ range $svc := .items -}}
+      {{ if eq $svc.kind "Service" -}}
+      {{ $meta := $svc.metadata -}}
+      {{ if $meta.labels -}}
+      {{ $hash := index $meta.labels "hash.azp.io/baseline" -}}
+      {{ if $hash -}}
+      server {
+        server_name {{$meta.name}}-{{$hash}}.azp.io;
+        listen 32080;
         location / {
-          auth_request /_context;
-          auth_request_set $user $upstream_http_user;
-          auth_request_set $l5d_dtab $upstream_http_l5d_dtab;
           proxy_http_version 1.1;
           proxy_set_header Host $host;
-          proxy_set_header Context-Headers user,l5d-ctx-*;
-          proxy_set_header user $user;
+          proxy_set_header Context-Headers l5d-ctx-*;
           proxy_set_header l5d-ctx-deadline "";
           proxy_set_header l5d-ctx-trace "";
-          proxy_set_header l5d-dtab $l5d_dtab;
+          proxy_set_header l5d-dtab "";
           proxy_set_header l5d-sample "";
           proxy_pass http://localhost;
-          add_header Set-Cookie "user=$user";
-          add_header Set-Cookie "l5d_dtab=$l5d_dtab";
         }
       }
+      {{ end -}}
+      {{ $hash := index $meta.labels "hash.azp.io/delta" -}}
+      {{ if $hash -}}
+      {{ range $cfg := $.items -}}
+      {{ if and (eq $cfg.kind "ConfigMap") (eq $cfg.metadata.name "l5d-routes") -}}
+      {{ range $routeName, $route := $cfg.data -}}
+      server {
+        server_name {{$meta.name}}-{{$routeName}}-{{$hash}}.azp.io;
+        listen 32080;
+        location / {
+          proxy_http_version 1.1;
+          proxy_set_header Host $host;
+          proxy_set_header Context-Headers l5d-ctx-*;
+          proxy_set_header l5d-ctx-deadline "";
+          proxy_set_header l5d-ctx-trace "";
+          proxy_set_header l5d-dtab "{{$route}}";
+          proxy_set_header l5d-sample "";
+          proxy_pass http://localhost;
+        }
+      }
+      {{ end -}}
+      {{ end -}}
+      {{ end -}}
+      {{ end -}}
+      {{ end -}}
+      {{ end -}}
+      {{ end -}}
     }
   dtab.tmpl: |-
+    {{/* Resolve services using Kubernetes DNS */ -}}
     /svc => /$/io.buoyant.rinet/$SVC_PORT ;
-    /host => /$/io.buoyant.http.subdomainOfPfx/$POD_NAMESPACE.svc.cluster.local/host ;
-    /host => /$/io.buoyant.http.subdomainOfPfx/$POD_NAMESPACE.svc/host ;
-    /host => /$/io.buoyant.http.subdomainOfPfx/$POD_NAMESPACE/host ;
-    {{ range $res := .items -}}
-     {{ if eq $res.kind "Ingress" -}}
-      {{ if $res.spec.rules -}}
-       {{ range $rule := $res.spec.rules -}}
-        {{ range $path := $rule.http.paths -}}
-         {{ if or (not $path.path) (eq $path.path "/") -}}
-    /host/{{$rule.host}}:$SVC_PORT => /host/{{$path.backend.serviceName}}:{{$path.backend.servicePort}} ;
-    /host/{{$rule.host}} => /host/{{$path.backend.serviceName}}:{{$path.backend.servicePort}} ;
-         {{ end -}}
-        {{ end -}}
-       {{ end -}}
-      {{ end -}}
-     {{ end -}}
-     {{ if eq $res.kind "Service" -}}
-      {{ $meta := $res.metadata -}}
-      {{ if $meta.labels.via -}}
-       {{ range $key, $value := $meta.labels -}}
-        {{ if ne $key "via" -}}
-    /label/{{$key}}/{{$value}}/{{$meta.labels.via}} => /svc/{{$meta.name}} ;
-        {{ end -}}
-       {{ end -}}
-      {{ end -}}
-      {{ if and (ne $meta.name "l5d") $res.spec.selector.run -}}
-       {{ if eq $res.spec.selector.run "l5d" -}}
-        {{ if eq $res.spec.type "LoadBalancer" -}}
-         {{ $lb := $res.status.loadBalancer -}}
-         {{ if $lb.ingress -}}
-    /host/{{range $lb.ingress}}{{.ip}}{{end}}:$SVC_PORT => /host/{{$meta.name}} ;
-    /host/{{range $lb.ingress}}{{.ip}}{{end}} => /host/{{$meta.name}} ;
-         {{ end -}}
-         {{ if $meta.annotations.vhost -}}
-    /host/{{$meta.annotations.vhost}}:$SVC_PORT => /host/{{$meta.name}} ;
-    /host/{{$meta.annotations.vhost}} => /host/{{$meta.name}} ;
-         {{ end -}}
-        {{ end -}}
-        {{ if $res.spec.clusterIP -}}
-    /host/{{$res.spec.clusterIP}}:$SVC_PORT => /host/{{$meta.name}} ;
-    /host/{{$res.spec.clusterIP}} => /host/{{$meta.name}} ;
-        {{ end -}}
-    /host/{{$meta.name}}:$SVC_PORT => /host/{{$meta.name}} ;
-        {{ if $meta.annotations.l5d -}}
-    /host/{{$meta.name}} => {{$meta.annotations.l5d}} ;
-        {{ end -}}
-       {{ end -}}
-      {{ end -}}
-     {{ end -}}
+
+    {{/* Resolve baselines and deltas */ -}}
+    {{ range $svc := .items -}}
+    {{ if eq $svc.kind "Service" -}}
+    {{ $meta := $svc.metadata -}}
+    {{ if $meta.labels -}}
+    {{ $base := index $meta.labels "azp.io/base" -}}
+    {{ if $base -}}
+    {{ $delta := index $meta.labels "azp.io/delta" -}}
+    {{ if not $delta -}}
+    /baseline/{{$base}} => /svc/{{$meta.name}} ;
+    {{ else -}}
+    /delta/{{$delta}}/{{$base}} => /svc/{{$meta.name}} ;
     {{ end -}}
-    /http/*/* => /host ;
+    {{ end -}}
+    {{ end -}}
+    {{ end -}}
+    {{ end -}}
+
+    {{/* Resolve routes */}}
+    /route => /baseline ;
+    {{ range $svc := .items -}}
+    {{ if eq $svc.kind "Service" -}}
+    {{ $meta := $svc.metadata -}}
+    {{ if $meta.annotations -}}
+    {{ $route := index $meta.annotations "azp.io/route" -}}
+    {{ if $route -}}
+    /route/{{$meta.name}} => {{$route}} ;
+    {{ end -}}
+    {{ end -}}
+    {{ end -}}
+    {{ end -}}
+
+    {{/* Normalize host names */}}
+    /host => /$/io.buoyant.http.subdomainOfPfx/$ENV_NAME.svc.cluster.local/host ;
+    /host => /$/io.buoyant.http.subdomainOfPfx/$ENV_NAME.svc/host ;
+    /host => /$/io.buoyant.http.subdomainOfPfx/$ENV_NAME/host ;
+    {{ range $res := .items -}}
+    {{ if eq $res.kind "Service" -}}
+    {{ $meta := $res.metadata -}}
+    {{ if and (ne $meta.name "l5d") (ne $meta.name "ingress-l5d") -}}
+    {{ if $res.spec.selector.run -}}
+    {{ if eq $res.spec.selector.run "l5d" -}}
+    {{ $target := printf "/host/%s" $meta.name -}}
+    {{ if $meta.labels -}}
+    {{ $hash := index $meta.labels "hash.azp.io/delta" -}}
+    {{ if $hash -}}
+    {{ range $cfg := $.items -}}
+    {{ if and (eq $cfg.kind "ConfigMap") (eq $cfg.metadata.name "l5d-routes") -}}
+    {{ range $route, $unused := $cfg.data -}}
+    /host/{{$meta.name}}-{{$route}}-{{$hash}}.azp.io:$SVC_PORT => {{$target}} ;
+    /host/{{$meta.name}}-{{$route}}-{{$hash}}.azp.io => {{$target}} ;
+    {{ end -}}
+    {{ end -}}
+    {{ end -}}
+    {{ end -}}
+    {{ $hash := index $meta.labels "hash.azp.io/baseline" -}}
+    {{ if $hash -}}
+    /host/{{$meta.name}}-{{$hash}}.azp.io:$SVC_PORT => {{$target}} ;
+    /host/{{$meta.name}}-{{$hash}}.azp.io => {{$target}} ;
+    {{ end -}}
+    {{ end -}}
+    {{ if $res.spec.clusterIP -}}
+    /host/{{$res.spec.clusterIP}}:$SVC_PORT => {{$target}} ;
+    /host/{{$res.spec.clusterIP}} => {{$target}} ;
+    {{ end -}}
+    /host/{{$meta.name}} => /route/{{$meta.name}} ;
+    {{ end -}}
+    {{ end -}}
+    {{ end -}}
+    {{ end -}}
+    {{ end -}}
   n4d.config.yaml: |-
     interfaces:
     - kind: io.l5d.httpController
@@ -121,9 +154,9 @@ data:
       servers:
       - ip: 0.0.0.0
         port: 80
+      dstPrefix: /host
       interpreter:
         kind: io.l5d.namerd
-        namespace: default
         dst: /$/inet/localhost/4100
 ---
 apiVersion: extensions/v1beta1
@@ -133,7 +166,7 @@ metadata:
   labels:
     run: l5d
 spec:
-  replicas: 1
+  replicas: 2
   selector:
     matchLabels:
       run: l5d
@@ -147,34 +180,31 @@ spec:
         configMap:
           name: l5d
       containers:
-      - name: nginx-ingress
-        image: nginx:alpine
-        volumeMounts:
-        - name: l5d-config
-          subPath: nginx.conf
-          mountPath: /etc/nginx/nginx.conf
-          readOnly: true
-      - name: contextd
-        image: stephpr/contextd
-      - name: dtabd
-        image: stephpr/dtabd
+      - name: ingress
+        image: stephpr/k8s-nginx-n4d
+        imagePullPolicy: Always
         volumeMounts:
         - name: l5d-config
           mountPath: /config
           readOnly: true
         env:
-        - name: POD_NAMESPACE
+        - name: ENV_NAME
           valueFrom:
             fieldRef:
               fieldPath: metadata.namespace
         - name: SVC_PORT
           value: "80"
         - name: ENV_SUBST
-          value: "$POD_NAMESPACE $SVC_PORT"
+          value: "$ENV_NAME $SVC_PORT"
+        ports:
+        - name: http-ingress
+          containerPort: 32080
         args:
+        - /config/nginx.conf.tmpl
         - /config/dtab.tmpl
+        - configmap,service
       - name: n4d
-        image: buoyantio/namerd:0.8.6
+        image: buoyantio/namerd:0.9.1
         volumeMounts:
         - name: l5d-config
           mountPath: /io.buoyant/namerd/config
@@ -192,7 +222,7 @@ spec:
           tcpSocket:
             port: 9991
       - name: l5d
-        image: buoyantio/linkerd:0.8.6
+        image: buoyantio/linkerd:0.9.1
         volumeMounts:
         - name: l5d-config
           mountPath: /io.buoyant/linkerd/config
@@ -225,5 +255,18 @@ spec:
     port: 4180
   - name: admin
     port: 9990
-  - name: ingress-http
-    port: 32080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: l5d-ingress
+  labels:
+    run: l5d
+spec:
+  selector:
+    run: l5d
+  type: LoadBalancer
+  ports:
+  - name: http
+    port: 80
+    targetPort: 32080
