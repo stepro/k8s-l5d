@@ -36,7 +36,7 @@ data:
         }
       }
       {{ end -}}
-      {{ $hash := index $meta.labels "hash.azp.io/delta" -}}
+      {{ $hash := index $meta.labels "hash.azp.io/scoped" -}}
       {{ if $hash -}}
       {{ range $cfg := $.items -}}
       {{ if and (eq $cfg.kind "ConfigMap") (eq $cfg.metadata.name "l5d-routes") -}}
@@ -67,18 +67,18 @@ data:
     {{/* Resolve services using Kubernetes DNS */ -}}
     /svc => /$/io.buoyant.rinet/$SVC_PORT ;
 
-    {{/* Resolve baselines and deltas */ -}}
+    {{/* Resolve baselines and scopes */ -}}
     {{ range $svc := .items -}}
     {{ if eq $svc.kind "Service" -}}
     {{ $meta := $svc.metadata -}}
     {{ if $meta.labels -}}
     {{ $base := index $meta.labels "azp.io/base" -}}
     {{ if $base -}}
-    {{ $delta := index $meta.labels "azp.io/delta" -}}
-    {{ if not $delta -}}
+    {{ $scope := index $meta.labels "azp.io/scope" -}}
+    {{ if not $scope -}}
     /baseline/{{$base}} => /svc/{{$meta.name}} ;
     {{ else -}}
-    /delta/{{$delta}}/{{$base}} => /svc/{{$meta.name}} ;
+    /scope/{{$scope}}/{{$base}} => /svc/{{$meta.name}} ;
     {{ end -}}
     {{ end -}}
     {{ end -}}
@@ -106,12 +106,12 @@ data:
     {{ range $res := .items -}}
     {{ if eq $res.kind "Service" -}}
     {{ $meta := $res.metadata -}}
-    {{ if and (ne $meta.name "l5d") (ne $meta.name "ingress-l5d") -}}
+    {{ if and (ne $meta.name "l5d") (ne $meta.name "l5d-ingress") -}}
     {{ if $res.spec.selector.run -}}
     {{ if eq $res.spec.selector.run "l5d" -}}
     {{ $target := printf "/host/%s" $meta.name -}}
     {{ if $meta.labels -}}
-    {{ $hash := index $meta.labels "hash.azp.io/delta" -}}
+    {{ $hash := index $meta.labels "hash.azp.io/scoped" -}}
     {{ if $hash -}}
     {{ range $cfg := $.items -}}
     {{ if and (eq $cfg.kind "ConfigMap") (eq $cfg.metadata.name "l5d-routes") -}}
