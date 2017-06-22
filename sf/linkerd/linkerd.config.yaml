@@ -1,0 +1,9 @@
+routers:
+- protocol: http
+  servers:
+  - ip: 0.0.0.0
+    port: 80
+  dstPrefix: /host
+  interpreter:
+    kind: io.l5d.namerd
+    dst: /$/inet/localhost/4100

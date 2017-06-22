@@ -1,0 +1,20 @@
+<ServiceManifest Name="linkerd" Version="1.0"
+  xmlns="http://schemas.microsoft.com/2011/01/fabric"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <ServiceTypes>
+    <StatelessServiceType ServiceTypeName="linkerd" />
+  </ServiceTypes>
+  <CodePackage Name="linkerd" Version="0.1.0">
+    <EntryPoint>
+      <ContainerHost>
+        <ImageName>stephpr/linkerd:0.9.1</ImageName>
+      </ContainerHost>
+    </EntryPoint>
+  </CodePackage>
+  <Resources>
+    <Endpoints>
+      <Endpoint Name="Http" UriScheme="http" Protocol="http" Port="80" />
+      <Endpoint Name="Admin" UriScheme="http" Protocol="http" Port="9990" />
+    </Endpoints>
+  </Resources>
+</ServiceManifest>

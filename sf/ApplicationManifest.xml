@@ -1,0 +1,13 @@
+<ApplicationManifest ApplicationTypeName="linkerd" ApplicationTypeVersion="1.0"
+  xmlns="http://schemas.microsoft.com/2011/01/fabric"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <ServiceManifestImport>
+    <ServiceManifestRef ServiceManifestName="namerd" ServiceManifestVersion="1.0"/>
+  </ServiceManifestImport>
+  <ServiceManifestImport>
+    <ServiceManifestRef ServiceManifestName="linkerd" ServiceManifestVersion="1.0"/>
+  </ServiceManifestImport>
+  <ServiceManifestImport>
+    <ServiceManifestRef ServiceManifestName="nginx" ServiceManifestVersion="1.0"/>
+  </ServiceManifestImport>
+</ApplicationManifest>

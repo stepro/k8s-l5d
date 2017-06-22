@@ -1,0 +1,9 @@
+interfaces:
+- kind: io.l5d.httpController
+  ip: 0.0.0.0
+- kind: io.l5d.thriftNameInterpreter
+namers: []
+storage:
+  kind: io.l5d.inMemory
+  namespaces:
+    default:

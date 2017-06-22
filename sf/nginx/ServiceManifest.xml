@@ -1,0 +1,19 @@
+<ServiceManifest Name="nginx" Version="1.0"
+  xmlns="http://schemas.microsoft.com/2011/01/fabric"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <ServiceTypes>
+    <StatelessServiceType ServiceTypeName="nginx" />
+  </ServiceTypes>
+  <CodePackage Name="nginx" Version="0.1.0">
+    <EntryPoint>
+      <ContainerHost>
+        <ImageName>stephpr/sf-nginx-n4d</ImageName>
+      </ContainerHost>
+    </EntryPoint>
+  </CodePackage>
+  <Resources>
+    <Endpoints>
+      <Endpoint Name="Ingress" UriScheme="http" Protocol="http" Port="32080" />
+    </Endpoints>
+  </Resources>
+</ServiceManifest>

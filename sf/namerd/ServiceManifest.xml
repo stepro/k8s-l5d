@@ -1,0 +1,21 @@
+<ServiceManifest Name="namerd" Version="1.0"
+  xmlns="http://schemas.microsoft.com/2011/01/fabric"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <ServiceTypes>
+    <StatelessServiceType ServiceTypeName="namerd" />
+  </ServiceTypes>
+  <CodePackage Name="namerd" Version="0.1.0">
+    <EntryPoint>
+      <ContainerHost>
+        <ImageName>stephpr/namerd:0.9.1</ImageName>
+      </ContainerHost>
+    </EntryPoint>
+  </CodePackage>
+  <Resources>
+    <Endpoints>
+      <Endpoint Name="Thrift" UriScheme="http" Protocol="http" Port="4100" />
+      <Endpoint Name="Http" UriScheme="http" Protocol="http" Port="4180" />
+      <Endpoint Name="Admin" UriScheme="http" Protocol="http" Port="9991" />
+    </Endpoints>
+  </Resources>
+</ServiceManifest>
